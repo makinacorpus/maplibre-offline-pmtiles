@@ -1,0 +1,37 @@
+{
+    "version": 8,
+    "name": "Test Style",
+    "sources": {
+        "protomaps": {
+            "type": "vector"
+        }
+    },
+    "layers": [
+        {
+            "id": "background",
+            "type": "background",
+            "paint": {
+                "background-color": "#E0F7FA"
+            }
+        },
+        {
+            "id": "water",
+            "source": "protomaps",
+            "source-layer": "water",
+            "type": "fill",
+            "paint": {
+                "fill-color": "#FF5733"
+            }
+        },
+        {
+            "id": "buildings",
+            "source": "protomaps",
+            "source-layer": "buildings",
+            "type": "fill",
+            "paint": {
+                "fill-color": "#C70039",
+                "fill-opacity": 0.5
+            }
+        }
+    ]
+}

@@ -1,0 +1,24 @@
+# Logiciel et Systèmes d'exploitation
+.DS_Store
+Thumbs.db
+
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+.npm-cache/
+
+# Build
+dist/
+build/
+
+# Environnement
+.env
+.env.local
+.env.*.local
+
+# Editeurs
+.vscode/
+.idea/
+
+dev-dist/

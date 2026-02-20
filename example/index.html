@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapLibre Offline PMTiles</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗺️</text></svg>">
+    <link href='https://unpkg.com/maplibre-gl@4.0.0/dist/maplibre-gl.css' rel='stylesheet' />
+    <link rel="stylesheet" href="./style.css">
+    <style>
+        #controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .control-panel {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .control-panel h2 {
+            margin-top: 0;
+            font-size: 1.2rem;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        .status {
+            font-size: 0.9em;
+            color: #666;
+            min-height: 1.2em;
+        }
+
+        label {
+            display: inline-block;
+            font-size: 0.9em;
+            cursor: pointer;
+        }
+
+        .floating-btn {
+            position: fixed;
+            bottom: 60px;
+            right: 20px;
+            z-index: 1000;
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            font-size: 1rem;
+            font-weight: bold;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .floating-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+            background-color: #0056b3;
+        }
+
+        .floating-btn:active {
+            transform: translateY(0);
+        }
+
+        header {
+            background-color: #24292e;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            z-index: 20;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .github-link {
+            display: flex;
+            align-items: center;
+            color: white;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .github-link:hover {
+            opacity: 0.8;
+        }
+
+        /* Responsive Layout */
+        @media (max-width: 768px) {
+            #controls {
+                grid-template-columns: 1fr;
+            }
+
+            header h1 {
+                font-size: 1rem;
+            }
+
+            .github-link svg {
+                width: 24px;
+                height: 24px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>MapLibre Offline PMTiles</h1>
+        <a href="https://github.com/makinacorpus/maplibre-offline-pmtiles" target="_blank" title="View on GitHub"
+            class="github-link">
+            <svg height="32" aria-hidden="true" viewBox="0 0 16 16" version="1.1" width="32" data-view-component="true">
+                <path fill="white"
+                    d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.46-1.61.06-1.61.06-1.15-.56-1.5-.06-1.5-.06-1.08.3-.06 1.14-.06 1.14.71.35 1.12 1.48 1.12 1.48.71 1.25 1.86.88 2.51.69.11-.53.28-.88.51-1.08.02.83.02 1.73.02 1.98 0 .21-.15.46-.55.38A8.013 8.013 0 0 1 0 8c0-4.42 3.58-8 8-8Z">
+                </path>
+            </svg>
+        </a>
+    </header>
+
+    <div id="controls">
+        <!-- RASTER PANEL -->
+        <div class="control-panel">
+            <h2>Raster Map</h2>
+            <input type="text" id="raster-url" value="./stamen_toner(raster)CC-BY+ODbL_z3.pmtiles"
+                placeholder="Raster PMTiles URL">
+            <div class="actions">
+                <button id="raster-download-btn">Download & Save</button>
+                <button id="raster-load-btn">Load from Storage</button>
+                <button id="raster-unload-btn">Unload (Hide)</button>
+                <button id="raster-delete-btn">Delete (Storage)</button>
+                <label><input type="checkbox" id="raster-visible-chk" disabled> Visible</label>
+            </div>
+            <div id="raster-status" class="status">Status: Ready</div>
+        </div>
+
+        <!-- VECTOR PANEL -->
+        <div class="control-panel">
+            <h2>Vector Map</h2>
+            <input type="text" id="vector-url" value="./protomaps(vector)ODbL_firenze.pmtiles"
+                placeholder="Vector PMTiles URL">
+            <input type="text" id="vector-style-url" value="./test-style.json"
+                placeholder="Style URL or JSON Object string">
+            <div class="actions">
+                <button id="vector-download-btn">Download & Save</button>
+                <button id="vector-load-btn">Load from Storage</button>
+                <button id="vector-unload-btn">Unload (Hide)</button>
+                <button id="vector-delete-btn">Delete (Storage)</button>
+                <label><input type="checkbox" id="vector-visible-chk" disabled> Visible</label>
+            </div>
+            <div id="vector-status" class="status">Status: Ready</div>
+        </div>
+    </div>
+
+    <button id="storage-check-btn" class="floating-btn" title="Check Storage Usage">
+        💾 Storage Info
+    </button>
+
+    <div id="map"></div>
+    <script type="module" src="./main.js"></script>
+</body>
+
+</html>
