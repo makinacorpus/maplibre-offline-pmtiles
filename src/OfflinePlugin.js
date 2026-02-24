@@ -16,7 +16,6 @@ export const OFFLINE_STATUS = {
  */
 export class OfflinePlugin {
 
-
     /**
      * Returns the estimated storage usage and quota in bytes.
      * @returns {Promise<{used: number, quota: number, percent: number}>}
@@ -320,8 +319,6 @@ export class OfflinePlugin {
             const storedStyle = await getMapStyle(name);
             if (storedStyle && storedStyle.layers) {
                 this._addCustomStyleLayers(map, storedStyle, sourceId, name);
-            } else {
-                this._addVectorLayers(map, metadata, sourceId, name);
             }
         } else {
             this._addRasterLayer(map, sourceId, name);
@@ -359,6 +356,7 @@ export class OfflinePlugin {
             }
         });
     }
+
     _addCustomStyleLayers(map, style, sourceId, name) {
         style.layers.forEach(layer => {
             const newLayer = { ...layer };
@@ -379,71 +377,4 @@ export class OfflinePlugin {
             }
         });
     }
-
-    _addVectorLayers(map, metadata, sourceId, name) {
-
-        if (!map.getLayer('background')) {
-            map.addLayer({
-                id: 'background',
-                type: 'background',
-                paint: { 'background-color': '#e0e0e0' }
-            }, map.getStyle().layers[0]?.id); // Insert at bottom
-        }
-
-        let vectorLayers = (metadata && metadata.vector_layers) ? metadata.vector_layers : [];
-
-        if (vectorLayers.length > 0) {
-            const polyLayer = vectorLayers.find(l => ['earth', 'landuse', 'water', 'buildings', 'land'].includes(l.id));
-            if (polyLayer) {
-                map.addLayer({
-                    id: `${name}-fill`,
-                    type: 'fill',
-                    source: sourceId,
-                    'source-layer': polyLayer.id,
-                    paint: {
-                        'fill-color': polyLayer.id === 'water' ? '#88ccff' : '#88aa88',
-                        'fill-opacity': 0.6,
-                        'fill-outline-color': '#ffffff'
-                    }
-                });
-            }
-
-            const lineLayer = vectorLayers.find(l => ['roads', 'transit', 'boundaries', 'transportation'].includes(l.id));
-            if (lineLayer) {
-                map.addLayer({
-                    id: `${name}-line`,
-                    type: 'line',
-                    source: sourceId,
-                    'source-layer': lineLayer.id,
-                    paint: { 'line-color': '#555555' }
-                });
-            }
-
-            vectorLayers.forEach((l, i) => {
-                if (map.getLayer(`${name}-debug-${l.id}`)) return;
-                if (l.id === polyLayer?.id || l.id === lineLayer?.id) return;
-
-                map.addLayer({
-                    id: `${name}-debug-${l.id}`,
-                    type: 'line',
-                    source: sourceId,
-                    'source-layer': l.id,
-                    paint: {
-                        'line-color': `hsl(${i * 60}, 100%, 30%)`,
-                        'line-width': 1
-                    }
-                });
-            });
-        } else {
-            map.addLayer({
-                id: `${name}-fallback-fill`,
-                type: 'fill',
-                source: sourceId,
-                'source-layer': 'earth',
-                paint: { 'fill-color': 'pink', 'fill-opacity': 0.5 }
-            });
-        }
-    }
-
-
 }
