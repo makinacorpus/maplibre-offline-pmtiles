@@ -36,7 +36,7 @@ export default defineConfig({
                 ]
             },
             workbox: {
-                globPatterns: ['**/*.{js,css,html,ico,png,svg,json}'],
+                globPatterns: ['**/*.{js,css,html,ico,png,svg,json,pbf}'],
                 navigateFallback: 'index.html',
                 navigateFallbackDenylist: [/^\/.*\.pmtiles$/],
                 runtimeCaching: [

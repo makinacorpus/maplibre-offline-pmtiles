@@ -89,6 +89,14 @@ This plugin relies on the browser's `IndexedDB` to store PMTiles files. While mo
 - **Limit Zoom Levels**: Only package the zoom levels you actually need (e.g., zoom 10 to 15). Zoom levels 14 and 15 contain the most data and drastically increase file size.
 - **Quota Exceeded**: The plugin detects storage limits and will emit an `OFFLINE_STATUS.ERROR_QUOTA` progress event if the device runs out of allocated space. Always handle this status in your UI.
 
+### Handling Offline Styles (Sprites and Fonts)
+
+The plugin downloads PMTiles data (map geometries) and optionally caches the associated `style.json` in IndexedDB. However, **MapLibre fetches external style resources like Sprites (icons) and Glyphs (fonts) dynamically**. The plugin does *not* intercept or store these assets. 
+
+To ensure your map remains fully functional offline (displaying text labels and icons), you should delegate the caching of these assets to your Progressive Web App (PWA) Service Worker:
+
+**Local Assets (Recommended):** Download the necessary font `.pbf` folders and sprite files locally into your application's `public/` or `assets/` directory. Update the `sprite` and `glyphs` URLs in your `style.json` to point to these relative paths. Your Service Worker will then cache them automatically *before* going offline, during the initial installation of your app. This guarantees 100% availability.
+
 ### `OfflinePlugin`
 
 The main class for managing offline maps.
