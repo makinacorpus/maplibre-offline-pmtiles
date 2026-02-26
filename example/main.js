@@ -117,6 +117,29 @@ const run = async () => {
             alert("Storage estimation not supported by this browser.");
         }
     });
+
+    // Clear All Button
+    document.getElementById('clear-all-btn').addEventListener('click', async () => {
+        if (confirm("Permanently delete ALL maps and styles from storage? This action cannot be undone.")) {
+            // Unload currently known maps just in case before clearing
+            plugin.unloadMap(map, 'raster-map');
+            plugin.unloadMap(map, 'vector-map');
+
+            const chks = [document.getElementById('raster-visible-chk'), document.getElementById('vector-visible-chk')];
+            chks.forEach(chk => {
+                if (chk) {
+                    chk.checked = false;
+                    chk.disabled = true;
+                }
+            });
+
+            await plugin.clearAllMaps((data) => {
+                updateStatus('raster', data);
+                updateStatus('vector', data);
+            });
+            alert("All offline storage cleared.");
+        }
+    });
 };
 
 run();

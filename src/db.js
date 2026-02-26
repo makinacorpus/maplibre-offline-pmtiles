@@ -86,7 +86,7 @@ export async function getMapStyle(name) {
         return JSON.parse(text);
     } catch (err) {
         if (err.name !== 'NotFoundError') {
-             console.error(`Failed to get style for ${name}:`, err);
+            console.error(`Failed to get style for ${name}:`, err);
         }
         return null;
     }
@@ -102,7 +102,7 @@ export async function deleteMapStyle(name) {
         await dirHandle.removeEntry(`${name}.style.json`);
     } catch (err) {
         if (err.name !== 'NotFoundError') {
-             console.error(`Failed to delete style for ${name}:`, err);
+            console.error(`Failed to delete style for ${name}:`, err);
         }
     }
 }
@@ -141,8 +141,25 @@ export async function deleteMapFile(name) {
         const dirHandle = await getDirectory();
         await dirHandle.removeEntry(`${name}.pmtiles`);
     } catch (err) {
-         if (err.name !== 'NotFoundError') {
-             console.error(`Failed to delete map file for ${name}:`, err);
-         }
+        if (err.name !== 'NotFoundError') {
+            console.error(`Failed to delete map file for ${name}:`, err);
+        }
+    }
+}
+
+/**
+ * Clear all stored maps and styles
+ */
+export async function clearAllStorage() {
+    try {
+        const dirHandle = await getDirectory();
+        // @ts-ignore
+        for await (const [name] of dirHandle.entries()) {
+            await dirHandle.removeEntry(name, { recursive: true });
+        }
+        console.log("All offline storage cleared.");
+    } catch (err) {
+        console.error('Failed to clear all storage:', err);
+        throw err;
     }
 }

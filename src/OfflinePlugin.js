@@ -1,6 +1,6 @@
 
 import { PMTiles } from 'pmtiles';
-import { getMapFileWritable, getMapFile, deleteMapFile, saveMapStyle, getMapStyle, deleteMapStyle } from './db';
+import { getMapFileWritable, getMapFile, deleteMapFile, saveMapStyle, getMapStyle, deleteMapStyle, clearAllStorage } from './db';
 import { BlobSource } from './pmtiles_adapter';
 import pako from 'pako';
 
@@ -287,6 +287,24 @@ export class OfflinePlugin {
         await deleteMapFile(name);
         await deleteMapStyle(name); // Also delete the style
         report(OFFLINE_STATUS.COMPLETE, `Storage (map + style) cleared for ${name}.`);
+    }
+
+    /**
+     * Clears all offline maps and styles from storage
+     * @param {Function} [onProgress]
+     */
+    async clearAllMaps(onProgress) {
+        const report = (code, message) => {
+            if (onProgress) onProgress({ code, message });
+            else console.log(`[${code}] ${message}`);
+        };
+
+        try {
+            await clearAllStorage();
+            report(OFFLINE_STATUS.COMPLETE, `All offline storage cleared.`);
+        } catch (err) {
+            report(OFFLINE_STATUS.ERROR, `Failed to clear offline storage: ${err.message}`);
+        }
     }
 
     /**

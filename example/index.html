@@ -58,11 +58,17 @@
             cursor: pointer;
         }
 
-        .floating-btn {
+        .floating-btns {
             position: fixed;
             bottom: 60px;
             right: 20px;
             z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .floating-btn {
             padding: 12px 20px;
             background-color: #007bff;
             color: white;
@@ -74,6 +80,7 @@
             transition: transform 0.2s, box-shadow 0.2s;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 8px;
         }
 
@@ -85,6 +92,14 @@
 
         .floating-btn:active {
             transform: translateY(0);
+        }
+
+        .clear-btn {
+            background-color: #dc3545;
+        }
+
+        .clear-btn:hover {
+            background-color: #c82333;
         }
 
         header {
@@ -179,9 +194,14 @@
         </div>
     </div>
 
-    <button id="storage-check-btn" class="floating-btn" title="Check Storage Usage">
-        💾 Storage Info
-    </button>
+    <div class="floating-btns">
+        <button id="clear-all-btn" class="floating-btn clear-btn" title="Clear All Maps">
+            🗑️ Clear All
+        </button>
+        <button id="storage-check-btn" class="floating-btn" title="Check Storage Usage">
+            💾 Storage Info
+        </button>
+    </div>
 
     <div id="map"></div>
     <script type="module" src="./main.js"></script>
