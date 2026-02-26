@@ -2,6 +2,7 @@
 import { PMTiles } from 'pmtiles';
 import { saveMapFile, getMapFile, deleteMapFile, saveMapStyle, getMapStyle, deleteMapStyle } from './db';
 import { BlobSource } from './pmtiles_adapter';
+import pako from 'pako';
 
 export const OFFLINE_STATUS = {
     START: 'START',
@@ -99,10 +100,19 @@ export class OfflinePlugin {
                     const response = await p.getZxy(z, x, y);
                     checkAborted();
 
-                    if (response) {
-                        return { data: response.data };
+                    if (response && response.data) {
+                        let tileData = new Uint8Array(response.data);
+                        // Check for gzip magic number (1f 8b)
+                        if (tileData.length > 2 && tileData[0] === 0x1F && tileData[1] === 0x8B) {
+                            try {
+                                tileData = pako.inflate(tileData);
+                            } catch (err) {
+                                console.warn(`Failed to decompress tile ${z}/${x}/${y}:`, err);
+                            }
+                        }
+                        return { data: tileData.buffer };
                     } else {
-                        return { data: null };
+                        return { data: new ArrayBuffer(0) };
                     }
                 }
             } catch (e) {
@@ -296,7 +306,10 @@ export class OfflinePlugin {
         const metadata = await p.getMetadata();
 
 
-        const isVector = header.tileType === 1;
+        const isVector = header.tileType === 1 ||
+            (metadata && metadata.format === 'pbf') ||
+            (metadata && metadata.format === 'application/vnd.maplibre-vector-tile') ||
+            (metadata && metadata.encoding === 'mlt');
 
 
         let attribution = undefined;
@@ -306,19 +319,49 @@ export class OfflinePlugin {
 
 
         const sourceId = `${name}-source`;
-        map.addSource(sourceId, {
+        const sourceConfig = {
             type: isVector ? 'vector' : 'raster',
             url: `offline-pmtiles://${name}`,
             tileSize: isVector ? 512 : 256,
             attribution: attribution
-        });
+        };
+
+        // Pass encoding to MapLibre GL JS if specified in metadata (e.g., MLT)
+        if (metadata && metadata.encoding) {
+            sourceConfig.encoding = metadata.encoding;
+        }
+
+        map.addSource(sourceId, sourceConfig);
 
 
         if (isVector) {
             // Check for custom style first
             const storedStyle = await getMapStyle(name);
-            if (storedStyle && storedStyle.layers) {
-                this._addCustomStyleLayers(map, storedStyle, sourceId, name);
+            if (storedStyle) {
+                if (storedStyle.sprite) {
+                    try {
+                        const spriteUrl = new URL(storedStyle.sprite, window.location.href).href;
+                        map.setSprite(spriteUrl);
+                    } catch (e) {
+                        console.warn('Failed to set sprite:', e);
+                    }
+                }
+
+                if (storedStyle.glyphs) {
+                    try {
+                        const glyphsUrl = new URL(storedStyle.glyphs, window.location.href)
+                            .href
+                            .replace(/%7B/g, '{')
+                            .replace(/%7D/g, '}');
+                        map.setGlyphs(glyphsUrl);
+                    } catch (e) {
+                        console.warn('Failed to set glyphs:', e);
+                    }
+                }
+
+                if (storedStyle.layers) {
+                    this._addCustomStyleLayers(map, storedStyle, sourceId, name);
+                }
             }
         } else {
             this._addRasterLayer(map, sourceId, name);
