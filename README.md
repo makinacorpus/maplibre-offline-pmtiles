@@ -2,13 +2,14 @@
 
 A plugin for [MapLibre GL JS](https://maplibre.org/) to manage offline maps in [PMTiles](https://github.com/protomaps/PMTiles) format.
 
-This project provides a set of functions to help manage offline maps, allowing you to download, store (via IndexedDB), and render vector and raster maps without an internet connection.
+This project provides a set of functions to help manage offline maps, allowing you to download, store (via OPFS - Origin Private File System), and render vector and raster maps without an internet connection.
 
 ## Features
 
 - 📥 Download PMTiles files.
-- 💾 Optimized storage using IndexedDB.
+- 💾 Optimized storage using OPFS.
 - 🗺️ Seamless integration with MapLibre (custom protocol `offline-pmtiles://`).
+- 🗜️ Support for both **MVT** (Mapbox Vector Tile) and **MLT** (MapLibre Tile) formats.
 - 📊 Storage quota management.
 
 ## Installation
@@ -38,23 +39,27 @@ await offlinePlugin.downloadMap(
     (status) => console.log('Download status:', status)
 );
 
-// 4. Load the map in MapLibre
+// 4. Instantiate MapLibre
 const map = new maplibregl.Map({
     container: 'map',
     style: {
         version: 8,
-        sources: {
-            'my-offline-source': {
-                type: 'vector',
-                url: 'offline-pmtiles://my-map', // Special protocol
-                attribution: 'My Map'
-            }
-        },
-        layers: [
-            // ... your layers
-        ]
+        sources: {},
+        layers: []
     }
 });
+
+// 5. Load the map and its offline style automatically once MapLibre is ready
+map.on('load', async () => {
+    // This will automatically add the source and any saved custom style layers
+    await offlinePlugin.loadMap(map, 'my-map');
+});
+
+// Alternatively, you can always manually add the source using the special protocol:
+// map.addSource('my-offline-source', {
+//     type: 'vector', // or 'raster'
+//     url: 'offline-pmtiles://my-map'
+// });
 ```
 
 ## Development
@@ -81,17 +86,19 @@ npm run preview
 
 ### Best Practices & Storage Limits (for PWA / Mobile)
 
-This plugin relies on the browser's `IndexedDB` to store PMTiles files. While modern browsers have generous storage quotas (often >1GB based on free disk space), you should carefully manage the size of the maps you provide for offline use, especially for Progressive Web Apps (PWA) on mobile networks.
+This plugin relies on the browser's `OPFS` (Origin Private File System) to store PMTiles files. **OPFS completely changes the game compared to IndexedDB**: it offers excellent, near-native performance for parsing and storing very large files without significant memory overhead.
+
+While modern browsers have generous storage quotas (often >1GB based on free disk space), you should still carefully manage the size of the maps you provide for offline use. Although the browser can *handle* massive files, downloading them over a mobile network remains a bottleneck.
 
 **Recommendations:**
-- **File Size**: Keep your `.pmtiles` files as small as possible. A good rule of thumb for reliable mobile downloads and parsing is to **keep files between 10MB and 50MB**.
-- **Avoid entire countries**: Do not force users to download hundreds of megabytes (like an entire country). Instead, provide PMTiles extracts at the regional, city, or district level.
+- **Network Constraints**: While OPFS can easily read a 500MB `.pmtiles` file instantly, downloading it over 3G/4G can fail or take a long time. A good rule of thumb for reliable mobile downloads is to **keep files between 10MB and 100MB**.
+- **Avoid entire countries**: Do not force mobile users to download hundreds of megabytes (like an entire country) over slow or metered cellular networks. Instead, provide PMTiles extracts at the regional, city, or district level.
 - **Limit Zoom Levels**: Only package the zoom levels you actually need (e.g., zoom 10 to 15). Zoom levels 14 and 15 contain the most data and drastically increase file size.
 - **Quota Exceeded**: The plugin detects storage limits and will emit an `OFFLINE_STATUS.ERROR_QUOTA` progress event if the device runs out of allocated space. Always handle this status in your UI.
 
 ### Handling Offline Styles (Sprites and Fonts)
 
-The plugin downloads PMTiles data (map geometries) and optionally caches the associated `style.json` in IndexedDB. However, **MapLibre fetches external style resources like Sprites (icons) and Glyphs (fonts) dynamically**. The plugin does *not* intercept or store these assets. 
+The plugin downloads PMTiles data (map geometries) and optionally caches the associated `style.json` in OPFS. However, **MapLibre fetches external style resources like Sprites (icons) and Glyphs (fonts) dynamically**. The plugin does *not* intercept or store these assets. 
 
 To ensure your map remains fully functional offline (displaying text labels and icons), you should delegate the caching of these assets to your Progressive Web App (PWA) Service Worker:
 

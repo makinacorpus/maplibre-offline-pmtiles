@@ -1,6 +1,6 @@
 
 import { PMTiles } from 'pmtiles';
-import { saveMapFile, getMapFile, deleteMapFile, saveMapStyle, getMapStyle, deleteMapStyle } from './db';
+import { getMapFileWritable, getMapFile, deleteMapFile, saveMapStyle, getMapStyle, deleteMapStyle } from './db';
 import { BlobSource } from './pmtiles_adapter';
 import pako from 'pako';
 
@@ -141,20 +141,43 @@ export class OfflinePlugin {
 
         try {
 
-
             // 1. Download Map Data
             let response = await fetch(url);
             if (!response.ok) throw new Error(`Download failed with status ${response.status}`);
 
-            let blob;
+            const writable = await getMapFileWritable(name);
+
             if (response.status === 200) {
-                report(OFFLINE_STATUS.PROGRESS, "Server supports full download. Fetching...");
-                blob = await response.blob();
+                const contentLength = response.headers.get('Content-Length');
+                const totalSize = contentLength ? parseInt(contentLength, 10) : 0;
+                let receivedLength = 0;
+                let lastReportTime = Date.now();
+
+                report(OFFLINE_STATUS.PROGRESS, "Server supports full download. Fetching and saving directly to disk...");
+
+                const reader = response.body.getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    await writable.write(value);
+                    if (totalSize) {
+                        receivedLength += value.length;
+                        const now = Date.now();
+                        // Report maximum twice a second
+                        if (now - lastReportTime > 500) {
+                            let progress = (receivedLength / totalSize * 100).toFixed(1);
+                            report(OFFLINE_STATUS.PROGRESS, `Downloading out to disk...`, progress);
+                            lastReportTime = now;
+                        }
+                    }
+                }
+                await writable.close();
             } else if (response.status === 206) {
 
                 const contentRange = response.headers.get('Content-Range');
                 if (!contentRange) {
-                    blob = await response.blob();
+                    report(OFFLINE_STATUS.PROGRESS, "Fetching and saving directly to disk...");
+                    await response.body.pipeTo(writable);
                 } else {
                     const parts = contentRange.split('/');
                     const totalSize = parseInt(parts[1], 10);
@@ -162,33 +185,47 @@ export class OfflinePlugin {
 
                     report(OFFLINE_STATUS.PROGRESS, `Detected Partial Content. Total: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
 
-                    const firstChunk = await response.blob();
-                    const chunks = [firstChunk];
-                    let receivedLength = firstChunk.size;
+                    const firstReader = response.body.getReader();
+                    let receivedLength = 0;
+
+                    while (true) {
+                        const { done, value } = await firstReader.read();
+                        if (done) break;
+                        await writable.write(value);
+                        receivedLength += value.length;
+                    }
 
                     let progress = (receivedLength / totalSize * 100).toFixed(1);
-                    report(OFFLINE_STATUS.PROGRESS, `Downloading chunks...`, progress);
+                    report(OFFLINE_STATUS.PROGRESS, `Downloading chunks to disk...`, progress);
 
+                    let lastReportTime = Date.now();
                     while (receivedLength < totalSize) {
                         const nextStart = receivedLength;
                         const headers = { 'Range': `bytes=${nextStart}-` };
                         response = await fetch(url, { headers });
                         if (!response.ok) throw new Error(`Chunk download failed: ${response.status}`);
-                        const nextChunk = await response.blob();
-                        chunks.push(nextChunk);
-                        receivedLength += nextChunk.size;
-                        progress = (receivedLength / totalSize * 100).toFixed(1);
-                        report(OFFLINE_STATUS.PROGRESS, `Downloading chunks...`, progress);
+
+                        const chunkReader = response.body.getReader();
+                        while (true) {
+                            const { done, value } = await chunkReader.read();
+                            if (done) break;
+                            await writable.write(value);
+                            receivedLength += value.length;
+
+                            const now = Date.now();
+                            if (now - lastReportTime > 500) {
+                                progress = (receivedLength / totalSize * 100).toFixed(1);
+                                report(OFFLINE_STATUS.PROGRESS, `Downloading chunks to disk...`, progress);
+                                lastReportTime = now;
+                            }
+                        }
                     }
-                    report(OFFLINE_STATUS.PROGRESS, "Assembling file...");
-                    blob = new Blob(chunks);
+                    await writable.close();
                 }
             } else {
-                blob = await response.blob();
+                report(OFFLINE_STATUS.PROGRESS, `Saving ${name} map data...`);
+                await response.body.pipeTo(writable);
             }
-
-            report(OFFLINE_STATUS.PROGRESS, `Saving ${name} map data...`);
-            await saveMapFile(name, blob);
 
             // 2. Handle Style (Optional)
             if (styleSource) {

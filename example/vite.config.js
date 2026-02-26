@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig({
     base: './',
@@ -7,6 +8,7 @@ export default defineConfig({
         outDir: 'dist'
     },
     plugins: [
+        basicSsl(),
         VitePWA({
             registerType: 'autoUpdate',
             devOptions: {
