@@ -125,7 +125,10 @@ export class OfflinePlugin {
     /**
      * Downloads a PMTiles file ...
      */
-    async downloadMap(url, name, onProgress, styleSource) {
+    async downloadMap(url, name, onProgress, styleSource, options = {}) {
+        if (options.signal?.aborted) {
+            throw new DOMException('Aborted', 'AbortError');
+        }
 
         const report = (code, message, progress) => {
             if (onProgress) onProgress({ code, message, progress });
@@ -139,13 +142,14 @@ export class OfflinePlugin {
 
         report(OFFLINE_STATUS.START, `Starting download of ${name} from ${url}...`);
 
+        let writable;
         try {
 
             // 1. Download Map Data
-            let response = await fetch(url);
+            let response = await fetch(url, { signal: options.signal });
             if (!response.ok) throw new Error(`Download failed with status ${response.status}`);
 
-            const writable = await getMapFileWritable(name);
+            writable = await getMapFileWritable(name);
 
             if (response.status === 200) {
                 const contentLength = response.headers.get('Content-Length');
@@ -157,6 +161,9 @@ export class OfflinePlugin {
 
                 const reader = response.body.getReader();
                 while (true) {
+                    if (options.signal?.aborted) {
+                        throw new DOMException('Aborted', 'AbortError');
+                    }
                     const { done, value } = await reader.read();
                     if (done) break;
                     await writable.write(value);
@@ -177,7 +184,7 @@ export class OfflinePlugin {
                 const contentRange = response.headers.get('Content-Range');
                 if (!contentRange) {
                     report(OFFLINE_STATUS.PROGRESS, "Fetching and saving directly to disk...");
-                    await response.body.pipeTo(writable);
+                    await response.body.pipeTo(writable, { signal: options.signal });
                 } else {
                     const parts = contentRange.split('/');
                     const totalSize = parseInt(parts[1], 10);
@@ -189,6 +196,9 @@ export class OfflinePlugin {
                     let receivedLength = 0;
 
                     while (true) {
+                        if (options.signal?.aborted) {
+                            throw new DOMException('Aborted', 'AbortError');
+                        }
                         const { done, value } = await firstReader.read();
                         if (done) break;
                         await writable.write(value);
@@ -200,13 +210,19 @@ export class OfflinePlugin {
 
                     let lastReportTime = Date.now();
                     while (receivedLength < totalSize) {
+                        if (options.signal?.aborted) {
+                            throw new DOMException('Aborted', 'AbortError');
+                        }
                         const nextStart = receivedLength;
                         const headers = { 'Range': `bytes=${nextStart}-` };
-                        response = await fetch(url, { headers });
+                        response = await fetch(url, { headers, signal: options.signal });
                         if (!response.ok) throw new Error(`Chunk download failed: ${response.status}`);
 
                         const chunkReader = response.body.getReader();
                         while (true) {
+                            if (options.signal?.aborted) {
+                                throw new DOMException('Aborted', 'AbortError');
+                            }
                             const { done, value } = await chunkReader.read();
                             if (done) break;
                             await writable.write(value);
@@ -224,7 +240,7 @@ export class OfflinePlugin {
                 }
             } else {
                 report(OFFLINE_STATUS.PROGRESS, `Saving ${name} map data...`);
-                await response.body.pipeTo(writable);
+                await response.body.pipeTo(writable, { signal: options.signal });
             }
 
             // 2. Handle Style (Optional)
@@ -240,7 +256,7 @@ export class OfflinePlugin {
                         report(OFFLINE_STATUS.PROGRESS, `Parsed style from JSON string.`);
                     } catch (e) {
                         // Not JSON, treat as URL
-                        const styleResp = await fetch(styleSource);
+                        const styleResp = await fetch(styleSource, { signal: options.signal });
                         if (!styleResp.ok) throw new Error(`Failed to fetch style: ${styleResp.status}`);
                         styleJson = await styleResp.json();
                     }
@@ -257,7 +273,15 @@ export class OfflinePlugin {
             report(OFFLINE_STATUS.COMPLETE, `Saved ${name}! Ready to load.`);
 
         } catch (e) {
-            if (e.name === 'QuotaExceededError') {
+            if (e.name === 'AbortError') {
+                if (writable) {
+                    try { await writable.close(); } catch (err) {}
+                }
+                await deleteMapFile(name);
+                await deleteMapStyle(name);
+                // Keep standard logging/reporting behavior
+                report(OFFLINE_STATUS.ERROR, "Download aborted");
+            } else if (e.name === 'QuotaExceededError') {
                 report(OFFLINE_STATUS.ERROR_QUOTA, "Storage quota exceeded! Please delete old maps.");
             } else {
                 report(OFFLINE_STATUS.ERROR, "Error: " + e.message);

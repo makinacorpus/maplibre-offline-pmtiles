@@ -115,12 +115,36 @@ Registers the `offline-pmtiles` protocol with MapLibre GL JS. MUST be called bef
 #### `constructor()`
 Creates a new instance of the plugin.
 
-#### `async downloadMap(url, name, onProgress, styleSource)`
+#### `async downloadMap(url, name, onProgress, styleSource, options)`
 Downloads a PMTiles file and saves it to local storage.
 - **url** `(string)`: URL of the PMTiles file.
 - **name** `(string)`: Unique ID/name for the map.
 - **onProgress** `(function)`: Callback `({ code, message, progress })`. See `OFFLINE_STATUS` below.
 - **styleSource** `(string|object)`: (Optional) URL to a style JSON or the style object itself.
+- **options** `(object)`: (Optional) Download options.
+    - **signal** `(AbortSignal)`: An instance of `AbortSignal` to cancel the download and clean up storage.
+
+**Example with cancellation:**
+```javascript
+const controller = new AbortController();
+
+try {
+    await offlinePlugin.downloadMap(
+        'https://example.com/map.pmtiles',
+        'my-map',
+        (p) => console.log(p.progress),
+        null,
+        { signal: controller.signal }
+    );
+} catch (e) {
+    if (e.name === 'AbortError') {
+        console.log('Download cancelled and files cleaned up');
+    }
+}
+
+// Later...
+controller.abort();
+```
 
 #### `async loadMap(map, name, onProgress)`
 Loads a map from storage into the MapLibre instance.
