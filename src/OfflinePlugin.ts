@@ -1,16 +1,25 @@
-
 import { PMTiles } from 'pmtiles';
 import { getMapFileWritable, getMapFile, deleteMapFile, saveMapStyle, getMapStyle, deleteMapStyle, clearAllStorage } from './db';
 import { BlobSource } from './pmtiles_adapter';
 import pako from 'pako';
 
-export const OFFLINE_STATUS = {
-    START: 'START',
-    PROGRESS: 'PROGRESS',
-    COMPLETE: 'COMPLETE',
-    ERROR: 'ERROR',
-    ERROR_QUOTA: 'ERROR_QUOTA'
-};
+export enum OFFLINE_STATUS {
+    START = 'START',
+    PROGRESS = 'PROGRESS',
+    COMPLETE = 'COMPLETE',
+    ERROR = 'ERROR',
+    ERROR_QUOTA = 'ERROR_QUOTA'
+}
+
+export interface OfflineProgress {
+    code: OFFLINE_STATUS;
+    message: string;
+    progress?: number | string;
+}
+
+export interface OfflineOptions {
+    signal?: AbortSignal;
+}
 
 /**
  * MapLibre Offline Manager Plugin
@@ -19,26 +28,28 @@ export class OfflinePlugin {
 
     /**
      * Returns the estimated storage usage and quota in bytes.
-     * @returns {Promise<{used: number, quota: number, percent: number}>}
+     * @returns {Promise<{used: number, quota: number, percent: number} | null>}
      */
-    async getStorageUsage() {
+    async getStorageUsage(): Promise<{ used: number, quota: number, percent: number } | null> {
         if (navigator.storage && navigator.storage.estimate) {
             const { usage, quota } = await navigator.storage.estimate();
-            return {
-                used: usage,
-                quota: quota,
-                percent: (usage / quota) * 100
-            };
+            if (usage !== undefined && quota !== undefined) {
+                return {
+                    used: usage,
+                    quota: quota,
+                    percent: (usage / quota) * 100
+                };
+            }
         }
         return null;
     }
 
     /**
      * Registers the offline-pmtiles protocol with MapLibre GL JS
-     * @param {Object} maplibregl - The maplibregl instance
+     * @param {any} maplibregl - The maplibregl instance
      */
-    static registerProtocol(maplibregl) {
-        maplibregl.addProtocol('offline-pmtiles', async (params, abortController) => {
+    static registerProtocol(maplibregl: any): void {
+        maplibregl.addProtocol('offline-pmtiles', async (params: { url: string }, abortController: AbortController) => {
             const url = params.url.replace('offline-pmtiles://', '');
             const parts = url.split('/');
             const name = parts[0];
@@ -67,19 +78,13 @@ export class OfflinePlugin {
                     let maxZoom = header.maxZoom || 14;
                     let bounds = [header.minLon, header.minLat, header.maxLon, header.maxLat];
 
-                    if (!bounds[0] && !bounds[2] && metadata && metadata.bounds) {
-                        const b = metadata.bounds.split(',').map(Number);
+                    if (!bounds[0] && !bounds[2] && metadata && (metadata as any).bounds) {
+                        const b = (metadata as any).bounds.split(',').map(Number);
                         if (b.length === 4) bounds = b;
-                    } else if (metadata && metadata.minzoom) {
-                        minZoom = parseInt(metadata.minzoom);
-                        maxZoom = parseInt(metadata.maxzoom);
+                    } else if (metadata && (metadata as any).minzoom) {
+                        minZoom = parseInt((metadata as any).minzoom);
+                        maxZoom = parseInt((metadata as any).maxzoom);
                     }
-
-                    // Determine mimetype from tileType
-                    let mimeType = "application/vnd.mapbox-vector-tile";
-                    if (header.tileType === 2) mimeType = "image/png";
-                    else if (header.tileType === 3) mimeType = "image/jpeg";
-                    else if (header.tileType === 4) mimeType = "image/webp";
 
                     return {
                         data: {
@@ -115,7 +120,7 @@ export class OfflinePlugin {
                         return { data: new ArrayBuffer(0) };
                     }
                 }
-            } catch (e) {
+            } catch (e: any) {
                 if (e.message !== 'Aborted') console.error(e);
                 throw e;
             }
@@ -125,12 +130,18 @@ export class OfflinePlugin {
     /**
      * Downloads a PMTiles file ...
      */
-    async downloadMap(url, name, onProgress, styleSource, options = {}) {
+    async downloadMap(
+        url: string,
+        name: string,
+        onProgress?: (progress: OfflineProgress) => void,
+        styleSource?: string | object,
+        options: OfflineOptions = {}
+    ): Promise<void> {
         if (options.signal?.aborted) {
             throw new DOMException('Aborted', 'AbortError');
         }
 
-        const report = (code, message, progress) => {
+        const report = (code: OFFLINE_STATUS, message: string, progress?: number | string) => {
             if (onProgress) onProgress({ code, message, progress });
             else console.log(`[${code}] ${message} ${progress ? `(${progress}%)` : ''}`);
         };
@@ -142,7 +153,7 @@ export class OfflinePlugin {
 
         report(OFFLINE_STATUS.START, `Starting download of ${name} from ${url}...`);
 
-        let writable;
+        let writable: FileSystemWritableFileStream | undefined;
         try {
 
             // 1. Download Map Data
@@ -159,6 +170,7 @@ export class OfflinePlugin {
 
                 report(OFFLINE_STATUS.PROGRESS, "Server supports full download. Fetching and saving directly to disk...");
 
+                if (!response.body) throw new Error("Response body is null");
                 const reader = response.body.getReader();
                 while (true) {
                     if (options.signal?.aborted) {
@@ -184,7 +196,8 @@ export class OfflinePlugin {
                 const contentRange = response.headers.get('Content-Range');
                 if (!contentRange) {
                     report(OFFLINE_STATUS.PROGRESS, "Fetching and saving directly to disk...");
-                    await response.body.pipeTo(writable, { signal: options.signal });
+                    if (!response.body) throw new Error("Response body is null");
+                    await response.body.pipeTo(writable as any, { signal: options.signal });
                 } else {
                     const parts = contentRange.split('/');
                     const totalSize = parseInt(parts[1], 10);
@@ -192,6 +205,7 @@ export class OfflinePlugin {
 
                     report(OFFLINE_STATUS.PROGRESS, `Detected Partial Content. Total: ${(totalSize / 1024 / 1024).toFixed(2)} MB`);
 
+                    if (!response.body) throw new Error("Response body is null");
                     const firstReader = response.body.getReader();
                     let receivedLength = 0;
 
@@ -218,6 +232,7 @@ export class OfflinePlugin {
                         response = await fetch(url, { headers, signal: options.signal });
                         if (!response.ok) throw new Error(`Chunk download failed: ${response.status}`);
 
+                        if (!response.body) throw new Error("Response body is null");
                         const chunkReader = response.body.getReader();
                         while (true) {
                             if (options.signal?.aborted) {
@@ -240,14 +255,15 @@ export class OfflinePlugin {
                 }
             } else {
                 report(OFFLINE_STATUS.PROGRESS, `Saving ${name} map data...`);
-                await response.body.pipeTo(writable, { signal: options.signal });
+                if (!response.body) throw new Error("Response body is null");
+                await response.body.pipeTo(writable as any, { signal: options.signal });
             }
 
             // 2. Handle Style (Optional)
             if (styleSource) {
 
                 report(OFFLINE_STATUS.PROGRESS, `Processing style for ${name}...`);
-                let styleJson;
+                let styleJson: any;
 
                 if (typeof styleSource === 'string' && styleSource.trim() !== "") {
                     // Try to parse as JSON first
@@ -272,7 +288,7 @@ export class OfflinePlugin {
 
             report(OFFLINE_STATUS.COMPLETE, `Saved ${name}! Ready to load.`);
 
-        } catch (e) {
+        } catch (e: any) {
             if (e.name === 'AbortError') {
                 if (writable) {
                     try { await writable.close(); } catch (err) {}
@@ -292,12 +308,12 @@ export class OfflinePlugin {
 
     /**
      * Deletes a map (and its style) from storage and removes it from the map instance
-     * @param {Object} map - MapLibre instance
+     * @param {any} map - MapLibre instance
      * @param {string} name - Name of the map
      * @param {Function} [onProgress]
      */
-    async removeMap(map, name, onProgress) {
-        const report = (code, message) => {
+    async removeMap(map: any, name: string, onProgress?: (progress: OfflineProgress) => void): Promise<void> {
+        const report = (code: OFFLINE_STATUS, message: string) => {
             if (onProgress) onProgress({ code, message });
             else console.log(`[${code}] ${message}`);
         };
@@ -317,8 +333,8 @@ export class OfflinePlugin {
      * Clears all offline maps and styles from storage
      * @param {Function} [onProgress]
      */
-    async clearAllMaps(onProgress) {
-        const report = (code, message) => {
+    async clearAllMaps(onProgress?: (progress: OfflineProgress) => void): Promise<void> {
+        const report = (code: OFFLINE_STATUS, message: string) => {
             if (onProgress) onProgress({ code, message });
             else console.log(`[${code}] ${message}`);
         };
@@ -326,30 +342,30 @@ export class OfflinePlugin {
         try {
             await clearAllStorage();
             report(OFFLINE_STATUS.COMPLETE, `All offline storage cleared.`);
-        } catch (err) {
+        } catch (err: any) {
             report(OFFLINE_STATUS.ERROR, `Failed to clear offline storage: ${err.message}`);
         }
     }
 
     /**
      * Unloads a map from the map instance (removes layers/source) but keeps it in storage
-     * @param {Object} map - MapLibre instance
+     * @param {any} map - MapLibre instance
      * @param {string} name - Name of the map
      */
-    unloadMap(map, name) {
+    unloadMap(map: any, name: string): void {
         this._cleanup(map, name);
     }
 
     /**
      * Toggles the visibility of a map
-     * @param {Object} map - MapLibre instance
+     * @param {any} map - MapLibre instance
      * @param {string} name - Name of the map
      * @param {boolean} visible - True to show, false to hide
      */
-    toggleMap(map, name, visible) {
+    toggleMap(map: any, name: string, visible: boolean): void {
         const style = map.getStyle();
         if (style && style.layers) {
-            style.layers.forEach(l => {
+            style.layers.forEach((l: any) => {
                 if (l.id.startsWith(`${name}-`)) {
                     map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none');
                 }
@@ -359,12 +375,12 @@ export class OfflinePlugin {
 
     /**
      * Loads a map from storage into the map instance
-     * @param {Object} map - MapLibre instance
+     * @param {any} map - MapLibre instance
      * @param {string} name - Name of the map in storage
      * @param {Function} [onProgress]
      */
-    async loadMap(map, name, onProgress) {
-        const report = (code, message) => {
+    async loadMap(map: any, name: string, onProgress?: (progress: OfflineProgress) => void): Promise<void> {
+        const report = (code: OFFLINE_STATUS, message: string) => {
             if (onProgress) onProgress({ code, message });
             else console.log(`[${code}] ${message}`);
         };
@@ -386,19 +402,19 @@ export class OfflinePlugin {
 
 
         const isVector = header.tileType === 1 ||
-            (metadata && metadata.format === 'pbf') ||
-            (metadata && metadata.format === 'application/vnd.maplibre-vector-tile') ||
-            (metadata && metadata.encoding === 'mlt');
+            (metadata && (metadata as any).format === 'pbf') ||
+            (metadata && (metadata as any).format === 'application/vnd.maplibre-vector-tile') ||
+            (metadata && (metadata as any).encoding === 'mlt');
 
 
         let attribution = undefined;
-        if (metadata && metadata.attribution) {
-            attribution = metadata.attribution;
+        if (metadata && (metadata as any).attribution) {
+            attribution = (metadata as any).attribution;
         }
 
 
         const sourceId = `${name}-source`;
-        const sourceConfig = {
+        const sourceConfig: any = {
             type: isVector ? 'vector' : 'raster',
             url: `offline-pmtiles://${name}`,
             tileSize: isVector ? 512 : 256,
@@ -406,8 +422,8 @@ export class OfflinePlugin {
         };
 
         // Pass encoding to MapLibre GL JS if specified in metadata (e.g., MLT)
-        if (metadata && metadata.encoding) {
-            sourceConfig.encoding = metadata.encoding;
+        if (metadata && (metadata as any).encoding) {
+            sourceConfig.encoding = (metadata as any).encoding;
         }
 
         map.addSource(sourceId, sourceConfig);
@@ -447,15 +463,15 @@ export class OfflinePlugin {
         }
 
         const typeStr = isVector ? "Vector" : "Raster";
-        const layerCount = (metadata?.vector_layers || []).length || (isVector ? 0 : 1);
+        const layerCount = (metadata as any)?.vector_layers?.length || (isVector ? 0 : 1);
         report(OFFLINE_STATUS.COMPLETE, `Map ${name} loaded (${typeStr})! Layers: ${layerCount}`);
     }
 
-    _cleanup(map, name) {
+    private _cleanup(map: any, name: string): void {
         // Remove layers starting with name-
         const style = map.getStyle();
         if (style && style.layers) {
-            style.layers.forEach(l => {
+            style.layers.forEach((l: any) => {
                 if (l.id.startsWith(`${name}-`)) {
                     map.removeLayer(l.id);
                 }
@@ -468,7 +484,7 @@ export class OfflinePlugin {
         }
     }
 
-    _addRasterLayer(map, sourceId, name) {
+    private _addRasterLayer(map: any, sourceId: string, name: string): void {
         map.addLayer({
             id: `${name}-raster`,
             type: 'raster',
@@ -479,8 +495,8 @@ export class OfflinePlugin {
         });
     }
 
-    _addCustomStyleLayers(map, style, sourceId, name) {
-        style.layers.forEach(layer => {
+    private _addCustomStyleLayers(map: any, style: any, sourceId: string, name: string): void {
+        style.layers.forEach((layer: any) => {
             const newLayer = { ...layer };
 
             if (newLayer.type === 'background') {

@@ -1,7 +1,7 @@
 /**
  * Helper to get the OPFS directory handle
  */
-async function getDirectory() {
+async function getDirectory(): Promise<FileSystemDirectoryHandle> {
     return await navigator.storage.getDirectory();
 }
 
@@ -10,7 +10,7 @@ async function getDirectory() {
  * @param {string} name - Unique name for the map
  * @returns {Promise<FileSystemWritableFileStream>}
  */
-export async function getMapFileWritable(name) {
+export async function getMapFileWritable(name: string): Promise<FileSystemWritableFileStream> {
     const dirHandle = await getDirectory();
     const fileHandle = await dirHandle.getFileHandle(`${name}.pmtiles`, { create: true });
     return await fileHandle.createWritable();
@@ -21,7 +21,7 @@ export async function getMapFileWritable(name) {
  * @param {string} name - Unique name for the file
  * @param {Blob} blob - The binary data
  */
-export async function saveMapFile(name, blob) {
+export async function saveMapFile(name: string, blob: Blob): Promise<void> {
     try {
         const writable = await getMapFileWritable(name);
         await writable.write(blob);
@@ -38,12 +38,12 @@ export async function saveMapFile(name, blob) {
  * @param {string} name - The name of the file
  * @returns {Promise<File|null>} The file or null if not found
  */
-export async function getMapFile(name) {
+export async function getMapFile(name: string): Promise<File | null> {
     try {
         const dirHandle = await getDirectory();
         const fileHandle = await dirHandle.getFileHandle(`${name}.pmtiles`);
         return await fileHandle.getFile();
-    } catch (err) {
+    } catch (err: any) {
         if (err.name === 'NotFoundError') {
             return null;
         }
@@ -55,9 +55,9 @@ export async function getMapFile(name) {
 /**
  * Save a Style JSON to OPFS
  * @param {string} name - Unique name for the style (usually matches map name)
- * @param {Object} style - The style object
+ * @param {any} style - The style object
  */
-export async function saveMapStyle(name, style) {
+export async function saveMapStyle(name: string, style: any): Promise<void> {
     try {
         const dirHandle = await getDirectory();
         const fileHandle = await dirHandle.getFileHandle(`${name}.style.json`, { create: true });
@@ -75,16 +75,16 @@ export async function saveMapStyle(name, style) {
 /**
  * Retrieve a Style JSON from OPFS
  * @param {string} name - The name of the style
- * @returns {Promise<Object|null>} The style object or null if not found
+ * @returns {Promise<any|null>} The style object or null if not found
  */
-export async function getMapStyle(name) {
+export async function getMapStyle(name: string): Promise<any | null> {
     try {
         const dirHandle = await getDirectory();
         const fileHandle = await dirHandle.getFileHandle(`${name}.style.json`);
         const file = await fileHandle.getFile();
         const text = await file.text();
         return JSON.parse(text);
-    } catch (err) {
+    } catch (err: any) {
         if (err.name !== 'NotFoundError') {
             console.error(`Failed to get style for ${name}:`, err);
         }
@@ -96,11 +96,11 @@ export async function getMapStyle(name) {
  * Delete a map style
  * @param {string} name
  */
-export async function deleteMapStyle(name) {
+export async function deleteMapStyle(name: string): Promise<void> {
     try {
         const dirHandle = await getDirectory();
         await dirHandle.removeEntry(`${name}.style.json`);
-    } catch (err) {
+    } catch (err: any) {
         if (err.name !== 'NotFoundError') {
             console.error(`Failed to delete style for ${name}:`, err);
         }
@@ -111,14 +111,14 @@ export async function deleteMapStyle(name) {
  * List all stored map files
  * @returns {Promise<Array<{name: string, date: Date}>>}
  */
-export async function listMapFiles() {
-    const files = [];
+export async function listMapFiles(): Promise<Array<{ name: string, date: Date }>> {
+    const files: Array<{ name: string, date: Date }> = [];
     try {
         const dirHandle = await getDirectory();
         // @ts-ignore
         for await (const [name, handle] of dirHandle.entries()) {
             if (handle.kind === 'file' && name.endsWith('.pmtiles')) {
-                const file = await handle.getFile();
+                const file = await (handle as FileSystemFileHandle).getFile();
                 const mapName = name.replace('.pmtiles', '');
                 files.push({
                     name: mapName,
@@ -136,11 +136,11 @@ export async function listMapFiles() {
  * Delete a map file
  * @param {string} name
  */
-export async function deleteMapFile(name) {
+export async function deleteMapFile(name: string): Promise<void> {
     try {
         const dirHandle = await getDirectory();
         await dirHandle.removeEntry(`${name}.pmtiles`);
-    } catch (err) {
+    } catch (err: any) {
         if (err.name !== 'NotFoundError') {
             console.error(`Failed to delete map file for ${name}:`, err);
         }
@@ -150,7 +150,7 @@ export async function deleteMapFile(name) {
 /**
  * Clear all stored maps and styles
  */
-export async function clearAllStorage() {
+export async function clearAllStorage(): Promise<void> {
     try {
         const dirHandle = await getDirectory();
         // @ts-ignore

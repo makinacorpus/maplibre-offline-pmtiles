@@ -4,8 +4,10 @@
   "type": "module",
   "main": "./dist/maplibre-offline.umd.cjs",
   "module": "./dist/maplibre-offline.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/maplibre-offline.js",
       "require": "./dist/maplibre-offline.umd.cjs"
     }
@@ -46,9 +48,12 @@
     "pmtiles": "^4.4.0"
   },
   "devDependencies": {
+    "@types/pako": "^2.0.4",
     "@vitejs/plugin-basic-ssl": "^2.1.4",
     "maplibre-gl": "^5.18.0",
+    "typescript": "^5.9.3",
     "vite": "^7.3.1",
+    "vite-plugin-dts": "^4.5.4",
     "vite-plugin-pwa": "^1.2.0"
   }
 }

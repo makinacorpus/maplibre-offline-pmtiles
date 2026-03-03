@@ -1,6 +1,6 @@
 
 import maplibregl from 'maplibre-gl';
-import { OfflinePlugin, OFFLINE_STATUS } from '../src/index.js';
+import { OfflinePlugin, OFFLINE_STATUS } from '../src/index';
 
 const run = async () => {
     // helpers
